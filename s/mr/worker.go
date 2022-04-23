@@ -59,11 +59,11 @@ func Worker(mapf func(string, string) []KeyValue,
 			reducer(&task, reducef)
 		case Wait:
 			time.Sleep(5 * time.Second)
+			// fmt.Println("执行wait")
 		case Exit:
 			return
 		}
 	}	
-
 }
 
 // worker获取任务
@@ -120,7 +120,7 @@ func reducer(task *Task, reducef func (string, []string) string) {
 		}
 		//交给reducef，拿到结果
 		output := reducef(intermediate[i].Key, values)
-		//写到对应的output文件
+		//写到对应的output文件                
 		fmt.Fprintf(tempFile, "%v %v\n", intermediate[i].Key, output)
 		i = j
 	}

@@ -54,6 +54,7 @@ const (
 // snapshots) on the applyCh; at that point you can add fields to
 // ApplyMsg, but set CommandValid to false for these other uses.
 //
+
 type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
@@ -74,7 +75,6 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 	state        Nodestate
-	appendChan   chan *Entry
 	heartBeat    *time.Timer
 	electionTime *time.Timer
 
@@ -488,6 +488,7 @@ func (rf *Raft) appendEntry(peer int, heartbeat bool) {
 			nextIndex = lastLog.Index
 		}
 		preLog := rf.log.at(nextIndex - 1)
+		// fmt.Println("index " ,preLog.Index)
 		args := AppendEntriesArgs{
 			Term:         rf.currentTerm,
 			LeaderId:     rf.me,
@@ -543,15 +544,31 @@ func (rf *Raft) leaderSendEntries(peer int, args *AppendEntriesArgs) {
 }
 
 func (rf *Raft) findLastLogInTerm(x int) int {
-	for i := rf.log.lastLog().Index; i > 0; i-- {
-		term := rf.log.at(i).Term
-		if term == x {
-			return i
-		} else if term < x {
-			break
+	// 使用二分查找加速
+	l := 0
+	r := rf.log.lastLog().Index
+	for  l < r {
+		mid := (l + r) >> 1
+		if rf.log.at(mid).Term <= x {
+			l = mid + 1
+		} else {
+			r = mid
 		}
 	}
-	return -1
+	if rf.log.at(l).Term == x {
+		return l
+	} else {
+		return -1
+	}
+	// for i := rf.log.lastLog().Index; i > 0; i -- {
+	// 	term := rf.log.at(i).Term
+	// 	if term == x {
+	// 		return i
+	// 	} else if term < x {
+	// 		break
+	// 	}
+	// }
+	// return -1
 }
 
 func (rf *Raft) leaderCommmit() {
@@ -603,10 +620,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	rf.resetElectionTime()
-	if rf.state == Leader {
-		rf.state = Follower
-		// fmt.Println(rf.me, "变成了follower")
-	}
+	// if rf.state == Leader {
+	// 	rf.state = Follower
+	// 	// fmt.Println(rf.me, "变成了follower")
+	// }
 
 	if rf.log.lastLog().Index < args.PreLogIndex {
 		reply.Conflict = true
@@ -618,12 +635,23 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if rf.log.at(args.PreLogIndex).Term != args.PreLogTerm {
 		reply.Conflict = true
 		xTerm := rf.log.at(args.PreLogIndex).Term
-		for xIndex := args.PreLogIndex; xIndex > 0; xIndex-- {
-			if rf.log.at(xIndex-1).Term != xTerm {
-				reply.XIndex = xIndex
-				break
+		// 使用二分查找加速
+		l := 0
+		r := rf.log.at(args.PreLogIndex).Index
+		for  l < r {
+			mid := (l + r) >> 1
+			if rf.log.at(mid).Term >= xTerm {
+				r = mid
+			} else {
+				l = mid + 1
 			}
 		}
+		// for xIndex := args.PreLogIndex; xIndex > 0; xIndex-- {
+		// 	if rf.log.at(xIndex-1).Term != xTerm {
+		// 		reply.XIndex = xIndex
+		// 		break
+		// 	}
+		// }
 		reply.XTerm = xTerm
 		reply.XLen = rf.log.len()
 		return

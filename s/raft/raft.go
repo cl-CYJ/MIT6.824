@@ -428,7 +428,7 @@ func (rf *Raft) leaderElection() {
 									rf.state = Leader
 									for idx, _ := range rf.peers {
 										rf.nextIndex[idx] = lastLog.Index + 1
-										rf.matchIndex[idx] = 0
+										rf.matchIndex[idx] = -1
 									}
 									rf.appendEntries(true)
 								})
@@ -532,7 +532,7 @@ func (rf *Raft) leaderSendEntries(peer int, args *AppendEntriesArgs) {
 				} else {
 					lastLogInXTerm := rf.findLastLogInTerm(reply.XTerm)
 					if lastLogInXTerm > 0 {
-						rf.nextIndex[peer] = lastLogInXTerm
+						rf.nextIndex[peer] = lastLogInXTerm + 1
 					} else {
 						rf.nextIndex[peer] = reply.XIndex
 					}
@@ -548,11 +548,11 @@ func (rf *Raft) findLastLogInTerm(x int) int {
 	l := 0
 	r := rf.log.lastLog().Index
 	for  l < r {
-		mid := (l + r) >> 1
+		mid := (l + r + 1) >> 1
 		if rf.log.at(mid).Term <= x {
-			l = mid + 1
+			l = mid
 		} else {
-			r = mid
+			r = mid - 1
 		}
 	}
 	if rf.log.at(l).Term == x {
@@ -582,7 +582,7 @@ func (rf *Raft) leaderCommmit() {
 			continue
 		}
 		counter := 1
-		for peer := 0; peer < len(rf.peers); peer++ {
+		for peer := 0; peer < len(rf.peers); peer ++ {
 			if peer == rf.me {
 				continue
 			}
@@ -652,6 +652,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// 		break
 		// 	}
 		// }
+		reply.XIndex = l
 		reply.XTerm = xTerm
 		reply.XLen = rf.log.len()
 		return
@@ -685,7 +686,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	reply.Success = true
 	if rf.commitIndex < args.LeaderCommit {
-		rf.commitIndex = min(args.LeaderCommit, rf.log.lastLog().Index)
+		// rf.commitIndex = min(args.LeaderCommit, rf.log.lastLog().Index)
+		rf.commitIndex = args.LeaderCommit
 		rf.apply()
 	}
 }
